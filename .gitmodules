@@ -1,0 +1,12 @@
+[submodule "ports/busybox"]
+	path = ports/busybox
+	url = https://git.busybox.net/busybox
+[submodule "ports/tcc"]
+	path = ports/tcc
+	url = https://repo.or.cz/tinycc.git
+[submodule "ports/lua"]
+	path = ports/lua
+	url = https://github.com/lua/lua
+[submodule "ports/nano"]
+	path = ports/nano
+	url = https://github.com/madnight/nano
