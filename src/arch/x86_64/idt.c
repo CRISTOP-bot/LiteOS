@@ -1,19 +1,16 @@
+extern void qemu_exit_pub(unsigned char);
 #include <stdint.h>
 
 void serial_puts(const char *s);
 void serial_hex(uint64_t v);
 
-static inline void qemu_exit(uint8_t code)
-{
-    __asm__ volatile ("outb %0, %1" :: "a"(code), "d"((uint16_t)0xf4));
-}
 
 void exc_c(uint64_t vector)
 {
     serial_puts("EXCEPTION vector=");
     serial_hex(vector);
     serial_puts(" -> halting\n");
-    qemu_exit(0x20);
+    qemu_exit_pub(0x20);
     for (;;)
         __asm__ volatile ("hlt");
 }
@@ -54,6 +51,29 @@ void idt_init(void)
     extern void idt_stub_12(void);
     extern void idt_stub_13(void);
     extern void idt_stub_14(void);
+    extern void idt_irq_0(void);
+    extern void idt_irq_1(void);
+    extern void idt_irq_2(void);
+    extern void idt_irq_3(void);
+    extern void idt_irq_4(void);
+    extern void idt_irq_5(void);
+    extern void idt_irq_6(void);
+    extern void idt_irq_7(void);
+    extern void idt_irq_8(void);
+    extern void idt_irq_9(void);
+    extern void idt_irq_10(void);
+    extern void idt_irq_11(void);
+    extern void idt_irq_12(void);
+    extern void idt_irq_13(void);
+    extern void idt_irq_14(void);
+    extern void idt_irq_15(void);
+
+    void (*idt_irq_tab[16])(void) = {
+        idt_irq_0, idt_irq_1, idt_irq_2, idt_irq_3,
+        idt_irq_4, idt_irq_5, idt_irq_6, idt_irq_7,
+        idt_irq_8, idt_irq_9, idt_irq_10, idt_irq_11,
+        idt_irq_12, idt_irq_13, idt_irq_14, idt_irq_15,
+    };
 
     idt_set(0, idt_stub_0);
     idt_set(1, idt_stub_1);
@@ -66,6 +86,9 @@ void idt_init(void)
     idt_set(12, idt_stub_12);
     idt_set(13, idt_stub_13);
     idt_set(14, idt_stub_14);
+
+    for (int i = 0; i < 16; i++)
+        idt_set(32 + i, idt_irq_tab[i]);
 
     idt_ptr p = { sizeof(idt) - 1, (uint64_t)&idt };
     __asm__ volatile ("lidt %0" :: "m"(p));

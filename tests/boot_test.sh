@@ -8,8 +8,8 @@ qemu-system-x86_64 -cdrom "$ISO" -serial file:"$OUT" -no-reboot \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04
 RC=$?
 cat "$OUT"
-if grep -q "BOOT OK" "$OUT" && [ "$RC" -eq 33 ]; then
-    echo "PASS: boot correcto (qemu rc=$RC)"
+if grep -q "BOOT OK" "$OUT" && grep -q "timer ok" "$OUT" && [ "$RC" -eq 97 ]; then
+    echo "PASS: boot + timer ok (qemu rc=$RC)"
     rm -f "$OUT"
     exit 0
 fi

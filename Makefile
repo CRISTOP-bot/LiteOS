@@ -12,6 +12,8 @@ OBJS   := $(patsubst %.c,$(BUILD)/%.o,$(filter %.c,$(SRCS))) \
 LIBC_SRCS := $(wildcard libc/src/*.c)
 LIBC_OBJS := $(patsubst libc/src/%.c,$(BUILD)/libc/%.o,$(LIBC_SRCS))
 
+LIBC_KERN_OBJS := $(patsubst libc/src/%.c,$(BUILD)/libc_kern/%.o,$(LIBC_SRCS))
+
 .PHONY: all kernel libc sysroot iso run debug test clean
 
 all: kernel libc sysroot iso
@@ -26,9 +28,13 @@ $(BUILD)/%.o: %.S
 
 kernel: $(KERNEL)
 
-$(KERNEL): $(OBJS) linker.ld
+$(KERNEL): $(OBJS) $(LIBC_KERN_OBJS) linker.ld
 	@mkdir -p $(BUILD)
-	$(LD) $(LDFLAGS) -T linker.ld $(OBJS) -o $@
+	$(LD) $(LDFLAGS) -T linker.ld $(OBJS) $(LIBC_KERN_OBJS) -o $@
+
+$(BUILD)/libc_kern/%.o: libc/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -Ilibc/include -c $< -o $@
 
 libc: $(BUILD)/libliteosc.a
 

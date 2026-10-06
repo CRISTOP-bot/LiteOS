@@ -1,15 +1,19 @@
 #include <stdint.h>
+#include <string.h>
 
 void serial_init(void);
+extern void qemu_exit_pub(unsigned char);
 void serial_puts(const char *s);
 void serial_hex(uint64_t v);
 
-static inline void qemu_exit(uint8_t code)
-{
-    __asm__ volatile ("outb %0, %1" :: "a"(code), "d"((uint16_t)0xf4));
-}
 
 extern void idt_init(void);
+extern void pmm_init(uint64_t mbi);
+extern void heap_init(void);
+extern void *kmalloc(uint64_t size);
+extern void kfree(void *ptr);
+extern void pic_init(void);
+extern void timer_init(void);
 
 void kernel_main(uint64_t mbi, uint64_t magic)
 {
@@ -26,8 +30,25 @@ void kernel_main(uint64_t mbi, uint64_t magic)
     idt_init();
     serial_puts("idt cargada\n");
 
+    pmm_init(mbi);
+
+    heap_init();
+    void *p = kmalloc(64);
+    if (p) {
+        memset(p, 0xA5, 64);
+        serial_puts("heap ok: kmalloc(64) -> ");
+        serial_hex((uint64_t)p);
+        serial_puts("\n");
+        kfree(p);
+    } else {
+        serial_puts("heap FAIL\n");
+    }
+
+    pic_init();
+    timer_init();
+    __asm__ volatile ("sti");
+
     serial_puts("BOOT OK\n");
-    qemu_exit(0x10); /* exit qemu: (0x10<<1)|1 = 33 */
     for (;;)
         __asm__ volatile ("hlt");
 }
