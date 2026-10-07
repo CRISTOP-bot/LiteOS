@@ -256,7 +256,8 @@ void initramfs_load(const u8 *img, u64 size)
 
         /* Crea la ruta completa en el VFS */
         char full[NAME_MAX * 2 + 2];
-        if (snprintf(full, sizeof(full), "/%s", name) >= (int)sizeof(full))
+        int flen = snprintf(full, sizeof(full), "/%s", name);
+        if (flen < 0 || flen >= (int)sizeof(full))
             goto next;
         if (strcmp(full, "/dev") == 0)
             goto next;               /* /dev lo crea dev_init */

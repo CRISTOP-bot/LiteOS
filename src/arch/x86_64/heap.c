@@ -20,14 +20,23 @@ static kblock_t *heap_head;
 
 static void heap_grow(void)
 {
+    uint64_t frames[HEAP_CHUNK_PAGES];
+    int got = 0;
+
     for (int i = 0; i < HEAP_CHUNK_PAGES; i++) {
         uint64_t page = pmm_alloc();
         if (!page) {
+            for (int j = 0; j < got; j++)
+                pmm_free(frames[j]);
             serial_puts("FATAL: kmalloc sin memoria fisica\n");
             qemu_exit(0x22);
             for (;;) __asm__ volatile ("hlt");
         }
-        kblock_t *b = (kblock_t *)page;
+        frames[got++] = page;
+    }
+
+    for (int i = 0; i < got; i++) {
+        kblock_t *b = (kblock_t *)frames[i];
         b->size = 4096 - KHDR;
         b->free = 1;
         b->next = heap_head;
@@ -84,7 +93,11 @@ void *kmalloc(usize size)
         best->next = split;
     }
     best->free = 0;
-    (void)prev_best;
+    if (prev_best) {
+        prev_best->next = best;
+    } else {
+        heap_head = best;
+    }
     return (void *)((uint8_t *)best + KHDR);
 }
 

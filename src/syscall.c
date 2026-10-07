@@ -180,17 +180,21 @@ static int copy_args(char *args[ARG_LIMIT + 1], u64 addr)
 {
     for (int i = 0; i <= ARG_LIMIT; i++) args[i] = NULL;
     if (!addr) return 0;
-    for (int i = 0; i < ARG_LIMIT; i++) {
+    int i = 0;
+    for (; i < ARG_LIMIT; i++) {
         u64 ptr;
         if (user_copy_from(&ptr, (void *)(addr + (u64)i * 8), 8) < 0)
-            return -EFAULT;
+            goto err;
         if (!ptr) return 0;
         args[i] = kmalloc(ARG_LEN);
-        if (!args[i]) return -ENOMEM;
+        if (!args[i]) goto err;
         int rc = copy_string(args[i], (const char *)ptr, ARG_LEN);
-        if (rc) return rc;
+        if (rc) goto err;
     }
     return -E2BIG;
+err:
+    for (int j = 0; j < i; j++) kfree(args[j]);
+    return -ENOMEM;
 }
 
 static void free_args(char *args[ARG_LIMIT + 1])

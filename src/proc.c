@@ -63,19 +63,7 @@ static struct proc *proc_alloc(void)
             vref(p->cwd);
 
         /* Pila del kernel: 2 paginas contiguas */
-        uint64_t base = 0;
-        for (int tries = 0; tries < 64; tries++) {
-            uint64_t p1 = pmm_alloc();
-            uint64_t p2 = pmm_alloc();
-            if (p1 && p2 && p2 == p1 + 4096) {
-                base = p1;
-                break;
-            }
-            if (p1)
-                pmm_free(p1);
-            if (p2)
-                pmm_free(p2);
-        }
+        uint64_t base = pmm_alloc_pages(2);
         if (!base) {
             if (p->cwd) vrelease(p->cwd);
             p->state = PS_FREE;

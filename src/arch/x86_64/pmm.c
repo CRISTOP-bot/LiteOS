@@ -57,7 +57,7 @@ void pmm_init(uint64_t mbi)
     while (off + 8 <= total) {
         uint32_t type  = *(uint32_t *)(mbi + off);
         uint32_t size  = *(uint32_t *)(mbi + off + 4);
-        if (size < 8)
+        if (size < 8 || off + size > total)
             break;
         if (type == 6) {
             uint32_t entry_size = *(uint32_t *)(mbi + off + 8);
@@ -108,7 +108,7 @@ void pmm_init(uint64_t mbi)
 uint64_t pmm_alloc_pages(usize n)
 {
     if (!n || n > pmm_free_pages) return 0;
-    for (uint64_t pg = 1; pg <= PMM_PAGES - n;) {
+    for (uint64_t pg = 1; pg < PMM_PAGES - n + 1;) {
         usize found = 0;
         while (found < n && !pmm_used(pg + found)) found++;
         if (found == n) {

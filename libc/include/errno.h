@@ -24,5 +24,6 @@
 #define ENAMETOOLONG   36
 #define ENOSYS         38
 #define ENOTEMPTY      39
+#define EINTR          4
 
 #endif

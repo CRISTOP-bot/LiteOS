@@ -95,6 +95,13 @@ idt_int80:
     pushq $0x80
     jmp trap_common
 
+/* ---- Generic handler for unassigned vectors (48..255 except 0x80) ---- */
+.global idt_generic_stub
+idt_generic_stub:
+    pushq $0
+    pushq $0      /* vector placeholder, will be patched or ignored */
+    jmp trap_common
+
 /* ---- Camino comun ---- */
 trap_common:
     pushq %rbp

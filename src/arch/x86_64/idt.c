@@ -25,6 +25,7 @@ __attribute__((aligned(16))) static idt_gate idt[256];
 
 extern void *idt_stub_table[];
 extern void idt_int80(void);
+extern void idt_generic_stub(void);
 
 static void idt_set(int n, void (*fn)(void), int dpl)
 {
@@ -42,6 +43,12 @@ void idt_init(void)
 {
     for (int i = 0; i < 48; i++)
         idt_set(i, (void (*)(void))idt_stub_table[i], 0);
+
+    for (int i = 48; i < 256; i++) {
+        if (i == 0x80)
+            continue;
+        idt_set(i, idt_generic_stub, 0);
+    }
 
     /* Syscalls: int 0x80 invocable desde ring 3 */
     idt_set(0x80, idt_int80, 3);

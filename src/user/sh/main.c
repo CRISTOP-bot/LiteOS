@@ -92,10 +92,11 @@ static int builtin(struct sh_command *cmd)
         long count;
         while ((count = sys_getdents64((int)fd, buf, sizeof(buf))) > 0) {
             size_t off = 0;
-            while (off < (size_t)count) {
+            size_t cnt = (size_t)count;
+            while (off < cnt) {
                 struct liteos_dirent64 *entry = (void *)(buf + off);
                 if (entry->d_reclen < offsetof(struct liteos_dirent64, d_name) + 1 ||
-                    entry->d_reclen > (size_t)count - off) {
+                    entry->d_reclen > cnt - off) {
                     error("invalid directory entry", path);
                     sys_close((int)fd);
                     return 1;

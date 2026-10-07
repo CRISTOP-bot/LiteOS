@@ -30,6 +30,8 @@ static ssize_t pipe_read(struct vnode *vn, u64 off, void *buf, usize n)
             break;
         if (p->writers == 0)
             return 0;                    /* EOF: escritores cerrados */
+        if (current->killed)
+            return -EINTR;
         current->state = PS_SLEEPING;
         current->wchan = p;
         schedule();
@@ -55,11 +57,13 @@ static ssize_t pipe_write(struct vnode *vn, u64 off, const void *buf, usize n)
     usize done = 0;
     while (done < n) {
         while (p->count == PIPE_BUF) {
+            if (current->killed)
+                return done > 0 ? (ssize_t)done : -EINTR;
+            if (p->readers == 0)
+                return done > 0 ? (ssize_t)done : -EPIPE;
             current->state = PS_SLEEPING;
             current->wchan = p;
             schedule();
-            if (p->readers == 0)
-                return done > 0 ? (ssize_t)done : -EPIPE;
         }
         usize space = PIPE_BUF - p->count;
         usize chunk = (n - done < space) ? n - done : space;

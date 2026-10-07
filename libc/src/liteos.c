@@ -10,6 +10,13 @@ static inline long syscall3(long number, long first, long second, long third)
     return result;
 }
 
+void __stack_chk_fail(void)
+{
+    sys_exit(139);  /* SIGSEGV-like exit code */
+    for (;;)
+        sys_yield();
+}
+
 long sys_read(int fd, void *buf, unsigned long n)
 {
     return syscall3(SYS_read, fd, (long)buf, (long)n);
