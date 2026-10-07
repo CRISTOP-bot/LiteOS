@@ -2,30 +2,32 @@
 
 LiteOS es un sistema operativo Unix-like de 64 bits, monolítico pero
 modular, desarrollado desde cero para x86_64. El repositorio es compacto:
-el código propio vive en `src/` (kernel) y `libc/` (libc propia), y el
-software de terceros se integra como submódulos en `ports/`.
+el código propio vive en `src/` (kernel y programas propios) y `libc/`;
+el software de terceros se integra como submódulos en `ports/`.
 
 ## Estado actual
 
-Etapa 1-4 completadas y verificables:
+LiteOS arranca con GRUB/Multiboot2 en QEMU y carga una imagen CPIO
+embebida que contiene `/bin/sh` y `/bin/hello`. `/bin/sh` es un programa
+ELF estático en **espacio de usuario**, no una consola de comandos del kernel.
+Usa la TTY, ramfs y syscalls `int 0x80` para ejecutar procesos.
 
-- Kernel mínimo que arranca vía GRUB (multiboot2) en QEMU, cambia a
-  long mode x86_64, instala GDT/IDT básica y reporta por el puerto serie.
-- Tests automatizados: `make test` arranca QEMU y exige `BOOT OK` por el
-  puerto serie con código de salida del dispositivo `isa-debug-exit`.
-- libc propia inicial (`string.h`) construida como `libliteosc.a` e
-  instalada en `sysroot/`.
-- Submódulos de ports listos: busybox, tcc, lua, nano.
+La shell permite `cd`, `pwd`, `ls`, `cat`, `echo`, `mkdir`, `rm`, `exit` y
+`help`, programas externos en `/bin`, argumentos con comillas, pipes,
+redirecciones `<`, `>` y `>>`. Es una shell mínima propia, **no** BusyBox ni
+una implementación POSIX completa: sin expansión de variables, globbing,
+control de trabajos ni persistencia del ramfs tras reiniciar.
 
-Todavía **no** implementado (se irá añadiendo por etapas): scheduler,
-procesos de usuario, ELF loader, syscalls, VFS, /bin/sh.
+Los ports BusyBox, tcc, lua y nano siguen siendo submódulos upstream sin
+integración con la libc de LiteOS.
 
 ## Estructura
 
 ```
 LiteOS/
-├── src/           # kernel
-│   └── arch/x86_64/
+├── src/           # kernel y programas propios
+│   ├── arch/x86_64/
+│   └── user/       # shell y programas ELF estáticos
 ├── libc/          # libc propia
 ├── ports/         # software externo (submódulos)
 ├── toolchain/     # configuración/manifest de la toolchain externa
@@ -39,34 +41,51 @@ LiteOS/
 
 ## Dependencias
 
-- GNU Make, GCC (o `x86_64-elf-gcc`), binutils, xorriso, GRUB (`grub-mkrescue`), mtools, QEMU.
-- Arch Linux (pacman): `make gcc binutils xorriso grub mtools qemu-full`
-- Debian/Ubuntu (apt): `make gcc binutils xorriso grub-pc-bin grub-common mtools qemu-system-x86`
+- GNU Make, cross-toolchain `x86_64-elf` (GCC y binutils), Python 3, xorriso, GRUB (`grub-mkrescue`), QEMU. GCC/binutils host solo para `TOOLCHAIN_MODE=host`.
+- Arch Linux (pacman), herramientas host: `make gcc binutils python xorriso grub mtools qemu-full`.
+- Debian/Ubuntu (apt), herramientas host: `make gcc binutils python3 xorriso grub-pc-bin grub-common mtools qemu-system-x86`.
+- Además, para la build normal se necesita una cross-toolchain `x86_64-elf` externa; esos paquetes host no la sustituyen.
 
 ## Toolchain
 
-Por defecto se usa el GCC del host en modo freestanding. Si existe una
-toolchain cruzada instalada, se detecta automáticamente en
-`toolchain/toolchain.mk` o vía:
+Por defecto se requiere una **cross-toolchain `x86_64-elf`** ya instalada
+en `PATH` o mediante `TOOLCHAIN_ROOT`. No se descarga ni compila GCC
+implícitamente; una herramienta ausente produce un error claro:
 
 ```sh
-make TOOLCHAIN_ROOT=/opt/x86_64-elf
+./scripts/setup-toolchain.sh
+make TOOLCHAIN_ROOT=/opt/x86_64-elf  # si no está en PATH
 ```
 
-Ver `toolchain/README.md` para más detalle. No se construye GCC desde cero.
+En este entorno todavía no hay `x86_64-elf-gcc`. Para probar la build local
+con GCC nativo de forma **explícita** (no equivalente a una build cross):
+
+```sh
+make TOOLCHAIN_MODE=host test
+```
+
+Ver `toolchain/README.md` para variables, limitaciones y reproducibilidad.
 
 ## Compilar y ejecutar
 
 ```sh
 git submodule update --init --recursive
-make            # kernel + libc + sysroot + iso
-make run        # arranca QEMU con la ISO
-make test       # verificación automatizada de boot
+make            # kernel + libc + /bin/sh + initramfs + ISO
+make run        # QEMU: teclado PS/2 en ventana gráfica; salida también por serie
+make test       # toolchain + libc/parser + procesos, VFS y shell en QEMU
+make test-toolchain # comprueba errores y modo host sin requerir cross-toolchain
+make test-libc  # prueba snprintf sin arrancar QEMU
 make debug      # QEMU esperando gdb (puerto 1234)
 make clean
 ```
 
-`make` produce `build/kernel.elf` y `build/liteos.iso`.
+Los submodules se fijan a commits concretos en los gitlinks del repositorio
+(ver `git submodule status`), no a la punta de una rama.
+
+`make` produce `build/kernel.elf`, `build/liteos.iso`, `build/user/bin/sh`
+y `build/initramfs.cpio`. Al ejecutar `make run`, escribe `help`, `hello`,
+`echo hola | cat` o `ls /bin` dentro de la ventana de QEMU. El puerto serie
+es para salida de depuración; el teclado PS/2 alimenta la TTY.
 
 ## Crear un port
 

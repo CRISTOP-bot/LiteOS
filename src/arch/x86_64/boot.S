@@ -1,11 +1,16 @@
-/* LiteOS x86_64 bootstrap: GRUB (multiboot2) -> long mode -> kernel_main */
+/* LiteOS x86_64 bootstrap: GRUB (multiboot2) -> long mode -> kernel_main.
+ *
+ * GRUB carga este ELF64 y salta aqui en modo protegido de 32 bits.
+ * Construimos un mapa de identidad de 8 GiB con paginas de 2 MiB
+ * (solo supervisor) y entramos en modo long. El kernel se enlaza
+ * en 1 MiB, por lo que las direcciones virtuales == fisicas.
+ */
 
 #define MULTIBOOT2_HEADER_MAGIC   0xe85250d6
 #define MULTIBOOT2_ARCH_I386      0
 #define MULTIBOOT2_MAGIC          0x36d76289
-#define MULTIBOOT2_END_TAG        0
 
-.section .multiboot2
+.section .multiboot2,"a",@progbits
 .align 8
 multiboot2_header:
     .long MULTIBOOT2_HEADER_MAGIC
@@ -18,9 +23,6 @@ multiboot2_header:
 header_end:
 
 .extern kernel_main
-.extern pml4_table
-.extern pdpt_table
-.extern pd_table
 
 .section .text.boot
 .code32
@@ -30,40 +32,43 @@ _start:
     movl %ebx, multiboot_ptr
     movl %eax, multiboot_magic
 
-    /* Validar magic */
     cmp $MULTIBOOT2_MAGIC, %eax
     jne .hang32
 
-    /* Inicializar tablas de paginas (identidad, primeras 16 MiB) */
-    mov $pml4_table, %eax
-    xor %ecx, %ecx
-    mov $4096*3, %ecx
-    xor %edx, %edx
-    mov $0x1000, %edi
-.zero:
-    movl $0, (%eax)
-    add $4, %eax
-    loop .zero
+    /* Limpiar pml4_table + pdpt_table + pd_tables (10 paginas) */
+    lea pml4_table, %edi
+    mov $(10 * 1024), %ecx          /* 10 paginas = 10240 dwords */
+    xor %eax, %eax
+1:  movl %eax, (%edi)
+    add $4, %edi
+    loop 1b
 
     /* pml4[0] -> pdpt */
     mov $pdpt_table, %eax
     or  $0x3, %eax
     mov %eax, pml4_table
-    /* pdpt[0] -> pd */
-    mov $pd_table, %eax
-    or  $0x3, %eax
-    mov %eax, pdpt_table
-    /* pd[0] = 0-2MiB, pd[1] = 2-4MiB, ... hasta 16 MiB */
-    mov $pd_table, %edi
-    mov $0x83, %eax
-    mov $8, %ecx
-.fill_pd:
-    mov %eax, (%edi)
+
+    /* pdpt[0..7] -> pd_tables[0..7]: 8 GiB de identidad */
+    mov $pd_tables, %esi
+    xor %ecx, %ecx
+2:  mov %esi, %edx
+    or  $0x3, %edx
+    mov %edx, pdpt_table(,%ecx,8)
+    add $4096, %esi
+    inc %ecx
+    cmp $8, %ecx
+    jb 2b
+
+    /* 8 * 512 entradas de 2 MiB con flags P|RW|PS */
+    lea pd_tables, %edi
+    mov $0x87, %eax
+    mov $(8 * 512), %ecx
+3:  mov %eax, (%edi)
     add $0x200000, %eax
     add $8, %edi
-    loop .fill_pd
+    loop 3b
 
-    /* Cargar CR3, activar PAE, EFER.LME, CR0.PG */
+    /* CR3, PAE, EFER.LME, CR0.PG */
     mov $pml4_table, %eax
     mov %eax, %cr3
     mov %cr4, %eax
@@ -77,7 +82,7 @@ _start:
     or  $0x80000001, %eax
     mov %eax, %cr0
 
-    /* GDT de 64 bits temporal y far jump */
+    /* GDT de transicion y salto lejano a 64 bits */
     .byte 0x66
     lgdt (gdt64_ptr)
     ljmp $0x08, $long_mode
@@ -97,9 +102,8 @@ long_mode:
     mov $_stack_top, %rsp
     xor %rbp, %rbp
     mov multiboot_ptr, %rdi
-    mov multiboot_magic, %esi
+    mov multiboot_magic, %rsi
     call kernel_main
-
 .hang64:
     cli
     hlt
@@ -109,8 +113,8 @@ long_mode:
 .align 8
 gdt64:
     .quad 0
-    .quad 0x00af9a000000ffff   /* code 64 */
-    .quad 0x00af92000000ffff   /* data 64 */
+    .quad 0x00af9a000000ffff      /* codigo 64 bits */
+    .quad 0x00af92000000ffff      /* datos */
 gdt64_ptr:
     .word . - gdt64 - 1
     .quad gdt64
@@ -122,7 +126,7 @@ multiboot_magic:  .quad 0
 
 .section .bss
 .align 4096
-.global pml4_table, pdpt_table, pd_table
+.global pml4_table, pdpt_table, pd_tables
 pml4_table: .skip 4096
 pdpt_table: .skip 4096
-pd_table:   .skip 4096
+pd_tables:  .skip 8 * 4096

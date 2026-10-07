@@ -1,18 +1,20 @@
 #!/bin/sh
-# Verifica la toolchain disponible y guía el setup.
+# Comprueba dependencias locales. No descarga ni instala software.
 set -eu
-TARGET=${TARGET:-x86_64-elf}
-echo "Target: $TARGET"
-if command -v $TARGET-gcc >/dev/null; then
-    echo "OK: $TARGET-gcc encontrado: $(command -v $TARGET-gcc)"
-elif command -v gcc >/dev/null; then
-    echo "AVISO: no hay $TARGET-gcc; se usará el GCC del host en modo freestanding."
-    echo "Para usar una toolchain cruzada: make TOOLCHAIN_ROOT=<prefijo>"
-else
-    echo "ERROR: no se encontró ningún compilador GCC."
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if ! command -v make >/dev/null 2>&1; then
+    echo 'ERROR: GNU Make no está instalado' >&2
     exit 1
 fi
-echo "Checking dependencias de build..."
-for cmd in make ld objcopy grub-mkrescue xorriso mformat qemu-system-x86_64; do
-    if command -v "$cmd" >/dev/null; then echo "  ok: $cmd"; else echo "  FALTA: $cmd"; fi
+make --no-print-directory -s -C "$root" toolchain-check \
+    TARGET="${TARGET:-x86_64-elf}" \
+    TOOLCHAIN_MODE="${TOOLCHAIN_MODE:-cross}" \
+    TOOLCHAIN_ROOT="${TOOLCHAIN_ROOT:-}"
+
+for cmd in make python3 grub-mkrescue xorriso mformat qemu-system-x86_64; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "ERROR: dependencia de build/QEMU ausente: $cmd" >&2
+        exit 1
+    fi
 done
+printf '%s\n' 'Entorno LiteOS OK (sin descargas ni modificaciones).'

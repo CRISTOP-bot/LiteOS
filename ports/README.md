@@ -1,5 +1,13 @@
-Portada del repositorio con las referencias upstream de los ports.
-Los submodulos se inicializan con: git submodule update --init --recursive
+# Ports
 
-Cada port tendra: README (estado/version/patches), patches/, build rules
-agregadas al Makefile cuando se porte.
+BusyBox, TCC, Lua y Nano están registrados como Git submodules con commits
+fijados en el repositorio principal. Inicialízalos con:
+
+```sh
+git submodule update --init --recursive
+```
+
+**Todavía no están portados ni se incluyen en el sistema arrancable.** Cada
+port se integrará solo cuando sus dependencias reales (libc, syscalls y
+filesystem) estén disponibles, mediante configuración y patches pequeños,
+sin copiar fuentes upstream ni fingir compatibilidad Linux.

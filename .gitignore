@@ -3,6 +3,7 @@ build/
 *.a
 *.iso
 sysroot/lib/*
+sysroot/bin/*
 sysroot/usr/include/*
 !sysroot/**/.gitkeep
 .DS_Store

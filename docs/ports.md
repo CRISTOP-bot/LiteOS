@@ -7,6 +7,6 @@ lista: upstream como submódulo, y reglas futuras en el Makefile raíz que:
 2. Aplican parches de `ports/<nombre>/patches/`.
 3. Instalan binarios/headers en `sysroot/`.
 
-Port prioritario: **TCC** (compilador C dentro del propio LiteOS).
-Luego: Lua (scripting), BusyBox (utilidades Unix), Nano (editor).
+Orden previsto, condicionado a syscalls/libc reales: **BusyBox**, TCC,
+Lua y Nano. Ninguno se declara portado hasta compilar y ejecutarse en LiteOS.
 GCC como port avanzado: explícitamente fuera del alcance inicial.

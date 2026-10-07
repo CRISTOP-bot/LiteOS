@@ -18,10 +18,19 @@ x86_64; aarch64/riscv64 se podrán añadir como `src/arch/aarch64/` y
 ## Flujo de arranque
 
 GRUB (multiboot2) -> `_start` (32 bits, protegido) -> paging + EFER.LME
--> `kernel_main` (64 bits) -> GDT/IDT -> BOOT OK -> `isa-debug-exit`.
+-> `kernel_main` (64 bits) -> IDT/GDT, memoria y VFS -> initramfs ->
+proceso inicial `/bin/sh` en ring 3 -> prompt interactivo.
 
 ## ABI / syscalls
 
-Pendiente de definir con la capa de syscalls (etapa 8). En la ABI
-inicial, cuando se implemente, se utilizará la convención `syscall` de
-x86_64 (rax = número, rdi/rsi/rdx/r10/r8/r9 = argumentos) propia de LiteOS.
+El ejecutable estático `/bin/sh` se incluye en un initramfs CPIO `newc`
+enlazado al kernel. Se enlaza en `0x10000001000`, fuera del mapa identidad
+supervisor del kernel; el loader carga segmentos ELF64 en un espacio de
+usuario independiente. Los procesos invocan `int 0x80`, con número de
+syscall en `rax`, argumentos en `rdi`, `rsi`, `rdx` y valor de retorno en
+`rax` (errores negativos `-errno`). Los números públicos están en
+`libc/include/sys/liteos.h`.
+
+No se ejecuta la shell en ring 0: la TTY, el VFS ramfs y los pipes son
+servicios del kernel; `/bin/sh` y `/bin/hello` son ELF de usuario. La
+shell mínima no pretende implementar POSIX ni ejecutar BusyBox todavía.

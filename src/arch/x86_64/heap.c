@@ -1,56 +1,107 @@
+/* LiteOS: heap del kernel (kmalloc/kfree) sobre paginas
+ * del gestor de memoria fisica. Las paginas de identidad
+ * (boot.S) hacen que direccion fisica == virtual, asi que
+ * cada bloque es directamente direccionable. */
 #include <stdint.h>
 #include <string.h>
+#include "kernel.h"
 
-#define HEAP_SIZE (1024 * 1024)
+#define HEAP_CHUNK_PAGES  16          /* 64 KiB por crecimiento */
 
-typedef struct block {
-    uint64_t size;   /* bytes de payload (sin cabecera) */
-    uint64_t free;   /* 1 = libre */
-    struct block *next;
-} block_t;
+typedef struct kblock {
+    uint64_t size;                    /* payload en bytes */
+    uint64_t free;
+    struct kblock *next;
+} kblock_t;
 
-static uint8_t heap[HEAP_SIZE];
-static block_t *heap_head;
+#define KHDR sizeof(kblock_t)
+
+static kblock_t *heap_head;
+
+static void heap_grow(void)
+{
+    for (int i = 0; i < HEAP_CHUNK_PAGES; i++) {
+        uint64_t page = pmm_alloc();
+        if (!page) {
+            serial_puts("FATAL: kmalloc sin memoria fisica\n");
+            qemu_exit(0x22);
+            for (;;) __asm__ volatile ("hlt");
+        }
+        kblock_t *b = (kblock_t *)page;
+        b->size = 4096 - KHDR;
+        b->free = 1;
+        b->next = heap_head;
+        heap_head = b;
+    }
+}
 
 void heap_init(void)
 {
-    heap_head = (block_t *)heap;
-    heap_head->size = HEAP_SIZE - sizeof(block_t);
-    heap_head->free = 1;
-    heap_head->next = 0;
+    heap_head = NULL;
+    heap_grow();
 }
 
-void *kmalloc(uint64_t size)
+void *kmalloc(usize size)
 {
-    size = (size + 7) & ~7u;
-    block_t *b = heap_head;
-    while (b) {
-        if (b->free && b->size >= size) {
-            if (b->size >= size + sizeof(block_t) + 8) {
-                block_t *split = (block_t *)((uint8_t *)b + sizeof(block_t) + size);
-                split->size = b->size - size - sizeof(block_t);
-                split->free = 1;
-                split->next = b->next;
-                b->next = split;
-                b->size = size;
-            }
-            b->free = 0;
-            return (void *)((uint8_t *)b + sizeof(block_t));
-        }
-        b = b->next;
+    if (size == 0)
+        return NULL;
+    if (size > (usize)-1 - KHDR - 4095) return NULL;
+    size = (size + 15u) & ~15u;
+    if (size > 4096 - KHDR) {
+        usize pages = (size + KHDR + 4095) / 4096;
+        u64 frame = pmm_alloc_pages(pages);
+        if (!frame) return NULL;
+        kblock_t *large = (kblock_t *)frame;
+        large->size = pages;
+        large->free = 2;
+        large->next = NULL;
+        return (u8 *)large + KHDR;
     }
-    return 0;
+
+    kblock_t *best = NULL, *prev = NULL, *p = heap_head, *prev_best = NULL;
+    while (p) {
+        if (p->free && p->size >= size) {
+            if (!best || p->size < best->size) {
+                best = p;
+                prev_best = prev;
+            }
+        }
+        prev = p;
+        p = p->next;
+    }
+
+    if (!best) {
+        heap_grow();
+        return kmalloc(size);
+    }
+
+    if (best->size >= size + KHDR + 16) {
+        kblock_t *split = (kblock_t *)((uint8_t *)best + KHDR + size);
+        split->size = best->size - size - KHDR;
+        split->free = 1;
+        split->next = best->next;
+        best->size = size;
+        best->next = split;
+    }
+    best->free = 0;
+    (void)prev_best;
+    return (void *)((uint8_t *)best + KHDR);
 }
 
 void kfree(void *ptr)
 {
     if (!ptr)
         return;
-    block_t *b = (block_t *)((uint8_t *)ptr - sizeof(block_t));
+    kblock_t *b = (kblock_t *)((uint8_t *)ptr - KHDR);
+    if (b->free == 2) {
+        for (usize i = 0; i < b->size; i++)
+            pmm_free((u64)b + i * 4096);
+        return;
+    }
     b->free = 1;
-    /* fusionar con siguiente si esta libre */
-    if (b->next && b->next->free) {
-        b->size += sizeof(block_t) + b->next->size;
+    if (b->next && b->next->free == 1 &&
+        (u8 *)b + KHDR + b->size == (u8 *)b->next) {
+        b->size += KHDR + b->next->size;
         b->next = b->next->next;
     }
 }
