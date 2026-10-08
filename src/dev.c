@@ -1,8 +1,6 @@
 /* LiteOS: nodos de dispositivo (/dev) y operaciones asociadas. */
-#include <stdint.h>
 #include <string.h>
 #include <errno.h>
-#include <fcntl.h>
 #include "kernel.h"
 
 enum {
@@ -13,18 +11,6 @@ enum {
     DEV_RANDOM,
     DEV_URANDOM
 };
-
-static uint32_t rng_state;
-
-static uint32_t xorshift32(void)
-{
-    uint32_t x = rng_state;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    rng_state = x;
-    return x;
-}
 
 static ssize_t dev_read(struct vnode *vn, u64 off, void *buf, usize n)
 {
@@ -38,12 +24,8 @@ static ssize_t dev_read(struct vnode *vn, u64 off, void *buf, usize n)
         return (ssize_t)n;
     case DEV_RANDOM:
     case DEV_URANDOM:
-        for (usize i = 0; i < n; i += 4) {
-            uint32_t r = xorshift32();
-            usize take = n - i < 4 ? n - i : 4;
-            memcpy((uint8_t *)buf + i, &r, take);
-        }
-        return (ssize_t)n;
+        /* Never expose the old RTC-seeded xorshift as random data. */
+        return -ENOSYS;
     case DEV_NULL:
     default:
         return 0;
@@ -83,10 +65,6 @@ __attribute__((unused)) static struct vnode *dev_make(const char *name, u32 dev)
 
 void dev_init(void)
 {
-    rng_state = (uint32_t)rtc_boot_epoch() ^ 0x9E3779B9u;
-    if (!rng_state)
-        rng_state = 1;
-
     struct vnode *dev = vfs_create(vfs_root(), "dev", V_DIR);
     if (dev)
         vrelease(dev);

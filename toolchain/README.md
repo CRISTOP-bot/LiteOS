@@ -15,17 +15,21 @@ make TOOLCHAIN_ROOT=/opt/x86_64-elf toolchain-check
 make TOOLCHAIN_ROOT=/opt/x86_64-elf test
 ```
 
-`make toolchain-check` comprueba CC, AS, LD, AR, OBJCOPY, OBJDUMP y STRIP y
-verifica que `CC -dumpmachine` coincide con `TARGET`. Un prefijo incorrecto
-o una herramienta ausente detienen la compilación con un error explícito.
-`./scripts/setup-toolchain.sh` también comprueba las utilidades de ISO/QEMU.
+`make toolchain-check` comprueba CC, AS, LD, AR, OBJCOPY y STRIP, y verifica
+que `CC -dumpmachine` coincide con `TARGET`. GCC usa el ensamblador target
+para compilar C y `.S`; `LD` enlaza el kernel, `AR` crea la libc, `OBJCOPY`
+embebe el initramfs y `STRIP` procesa los binarios de usuario. `OBJDUMP` y
+`READELF` son opcionales para inspección manual, no requisitos del build.
+Un prefijo incorrecto o una herramienta requerida ausente detienen la
+compilación con un error explícito. `./scripts/setup-toolchain.sh` también
+comprueba las utilidades de ISO/QEMU.
 
 | Variable | Valor por defecto | Propósito |
 | --- | --- | --- |
 | `TARGET` | `x86_64-elf` | Triple de destino |
 | `TOOLCHAIN_MODE` | `cross` | `cross` o `host` (opt-in) |
 | `TOOLCHAIN_ROOT` | vacío | Prefijo opcional; si está vacío se busca en `PATH` |
-| `CC AS LD AR OBJCOPY OBJDUMP STRIP` | según modo y target | Rutas configurables de herramientas |
+| `CC AS LD AR OBJCOPY STRIP` | según modo y target | Herramientas requeridas para el build |
 
 **Solo para pruebas locales** sin cross-toolchain puede usarse:
 

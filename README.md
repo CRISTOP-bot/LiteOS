@@ -32,7 +32,7 @@ LiteOS/
 ├── ports/         # software externo (submódulos)
 ├── toolchain/     # configuración/manifest de la toolchain externa
 ├── sysroot/       # filesystem de desarrollo
-├── scripts/       # automatización (bootstrap, QEMU, toolchain)
+├── scripts/       # build, comprobaciones de toolchain y QEMU
 ├── tests/         # pruebas
 ├── docs/          # documentación
 ├── linker.ld      # script de enlace del kernel
@@ -57,8 +57,8 @@ implícitamente; una herramienta ausente produce un error claro:
 make TOOLCHAIN_ROOT=/opt/x86_64-elf  # si no está en PATH
 ```
 
-En este entorno todavía no hay `x86_64-elf-gcc`. Para probar la build local
-con GCC nativo de forma **explícita** (no equivalente a una build cross):
+Solo para pruebas locales, puede usarse GCC nativo de forma **explícita**;
+esto no equivale a una build cross ni sustituye `x86_64-elf-gcc`:
 
 ```sh
 make TOOLCHAIN_MODE=host test

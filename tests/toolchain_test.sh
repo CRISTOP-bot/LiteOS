@@ -16,14 +16,14 @@ grep -q 'TOOLCHAIN_ROOT no contiene bin/' "$tmp/output"
 make --no-print-directory -s -C "$root" TOOLCHAIN_MODE=host toolchain-check >"$tmp/output"
 grep -q 'Toolchain OK:' "$tmp/output"
 
-if make --no-print-directory -s -C "$root" TOOLCHAIN_MODE=host OBJDUMP="$tmp/inexistente" toolchain-check >"$tmp/output" 2>&1; then
+if make --no-print-directory -s -C "$root" TOOLCHAIN_MODE=host OBJCOPY="$tmp/inexistente" toolchain-check >"$tmp/output" 2>&1; then
     echo 'FAIL: una herramienta ausente fue aceptada' >&2
     exit 1
 fi
 grep -q 'herramienta no ejecutable' "$tmp/output"
 
 if make --no-print-directory -s -C "$root" TARGET=invalid-elf TOOLCHAIN_MODE=cross \
-    CC=gcc AS=as LD=ld AR=ar OBJCOPY=objcopy OBJDUMP=objdump STRIP=strip \
+    CC=gcc AS=as LD=ld AR=ar OBJCOPY=objcopy STRIP=strip \
     toolchain-check >"$tmp/output" 2>&1; then
     echo 'FAIL: GCC con triple incorrecto fue aceptado' >&2
     exit 1

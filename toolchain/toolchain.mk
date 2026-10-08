@@ -35,11 +35,9 @@ $(eval $(call set_tool,AS,as))
 $(eval $(call set_tool,LD,ld))
 $(eval $(call set_tool,AR,ar))
 $(eval $(call set_tool,OBJCOPY,objcopy))
-$(eval $(call set_tool,OBJDUMP,objdump))
 $(eval $(call set_tool,STRIP,strip))
 
-CFLAGS ?= -std=gnu11 -ffreestanding -nostdinc -fno-stack-protector -fno-pic \
+CFLAGS ?= -std=gnu11 -ffreestanding -nostdinc -fno-stack-protector -fno-pic -fno-pie \
           -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -mgeneral-regs-only \
           -mcmodel=large -Wall -Wextra -Werror -O2 -g
-ASFLAGS ?= -64
 LDFLAGS ?= -nostdlib -static

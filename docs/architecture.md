@@ -6,14 +6,34 @@
 - `src/arch/x86_64/boot.S`: entrada multiboot2, tablas de páginas
   (identidad de las primeras 16 MiB con páginas de 2 MiB), transición a
   long mode, salto a 64 bits.
-- `src/arch/x86_64/idt.c` + `isrs.S`: IDT básica con excepciones CPU que
-  reportan el vector por el puerto serie y abortan (fase temprana).
-- `src/arch/x86_64/serial.c`: consola por COM1 (115200 8N1).
+- `src/arch/x86_64/idt.c`, `isrs.S`, `trap.c` y `gdt.c`: GDT/TSS,
+  IDT, stubs y despacho de traps específicos de x86_64.
+- `src/arch/x86_64/paging.c`, `pmm.c` y `heap.c`: memoria ligada al
+  mapa de arranque Multiboot2 y al mapeo identidad actual.
+- `src/drivers/serial/16550.c`: consola UART 16550A en COM1 (debug).
+- `src/drivers/input/keyboard.c`, `src/drivers/video/vga.c` y
+`src/drivers/rtc.c`:
+  teclado PS/2, consola VGA texto y RTC CMOS.
+
+`src/drivers/` agrupa implementaciones concretas de dispositivos. Sus accesos
+por puerto aún dependen de las primitivas x86 de `kernel.h`; no son interfaces
+portables entre arquitecturas.
 
 El código dependiente de arquitectura vive bajo `src/arch/<arch>/` para
 que el código genérico no dependa de x86_64. Inicialmente solo se soporta
 x86_64; aarch64/riscv64 se podrán añadir como `src/arch/aarch64/` y
 `src/arch/riscv64/` sin reescribir el resto.
+
+### Criptografía (`src/crypto/`)
+
+Las primitivas SHA-256 y SHA-512 son implementaciones genéricas de software
+basadas en FIPS 180-4. Sus interfaces de una sola operación están en
+`src/crypto.h`; no requieren memoria dinámica ni dependen de la arquitectura.
+No hay todavía proveedor de entropía del kernel ni API RNG. Por seguridad,
+las lecturas de `/dev/random` y `/dev/urandom` fallan con `ENOSYS`: el antiguo
+xorshift sembrado con el RTC no era criptográficamente seguro y no se debe usar para
+claves ni secretos. Las optimizaciones por arquitectura se añadirán solo junto
+con una implementación real y pruebas.
 
 ## Flujo de arranque
 

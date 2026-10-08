@@ -1,15 +1,15 @@
 #!/bin/sh
-# Validate every tool before building; never install or download anything.
+# Validate the real target toolchain; never install or download anything.
 set -eu
 
-if [ "$#" -ne 10 ]; then
-    echo 'uso: check-toolchain.sh <target> <cross|host> <cc> <as> <ld> <ar> <objcopy> <objdump> <strip> <root>' >&2
+if [ "$#" -ne 9 ]; then
+    echo 'uso: check-toolchain.sh <target> <cross|host> <cc> <as> <ld> <ar> <objcopy> <strip> <root>' >&2
     exit 2
 fi
 
 target=$1 mode=$2 cc=$3 assembler=$4 linker=$5 archiver=$6
-objcopy=$7 objdump=$8 strip=$9
-shift 9
+objcopy=$7 strip=$8
+shift 8
 root=$1
 
 if [ "$mode" != cross ] && [ "$mode" != host ]; then
@@ -21,7 +21,10 @@ if [ "$mode" = cross ] && [ -n "$root" ] && [ ! -d "$root/bin" ]; then
     exit 1
 fi
 
-for tool in "$cc" "$assembler" "$linker" "$archiver" "$objcopy" "$objdump" "$strip"; do
+# GCC invokes the target assembler for both C and preprocessed assembly.
+# LD links the kernel, AR builds libc, OBJCOPY embeds initramfs, and STRIP
+# removes debug information from user binaries. OBJDUMP/READELF are optional.
+for tool in "$cc" "$assembler" "$linker" "$archiver" "$objcopy" "$strip"; do
     if [ -z "$tool" ]; then
         echo 'ERROR: nombre de herramienta vacío' >&2
         exit 1
