@@ -1,0 +1,97 @@
+# LiteOS build system for x86_64 host
+
+ARCH ?= x86_64
+TARGET ?= x86_64-linux-gnu
+TOOLCHAIN_DIR ?= toolchain
+ROOTFS_DIR ?= rootfs
+BUILD_DIR ?= build
+APPS_DIR ?= apps
+
+# Use toolchain compiler if present; otherwise fall back to host gcc
+TOOLCHAIN_GCC := $(TOOLCHAIN_DIR)/bin/$(TARGET)-gcc
+CC := $(if $(wildcard $(TOOLCHAIN_GCC)),$(TOOLCHAIN_GCC),gcc)
+AR := $(if $(wildcard $(TOOLCHAIN_DIR)/bin/$(TARGET)-ar),$(TOOLCHAIN_DIR)/bin/$(TARGET)-ar,ar)
+RANLIB := $(if $(wildcard $(TOOLCHAIN_DIR)/bin/$(TARGET)-ranlib),$(TOOLCHAIN_DIR)/bin/$(TARGET)-ranlib,ranlib)
+
+.PHONY: all help setup toolchain apps busybox lua tcc nano rootfs clean distclean verify-toolchain
+
+all: help
+
+help:
+	@echo "LiteOS x86_64 build system"
+	@echo "========================="
+	@echo ""
+	@echo "Targets:"
+	@echo "  make setup             Setup environment and fetch sources"
+	@echo "  make toolchain         Download a prebuilt toolchain (external URL required)"
+	@echo "  make apps              Build BusyBox, Lua, TCC and Nano"
+	@echo "  make busybox           Build BusyBox"
+	@echo "  make lua               Build Lua"
+	@echo "  make tcc               Build Tiny C Compiler"
+	@echo "  make nano             Build Nano"
+	@echo "  make rootfs            Assemble rootfs with all apps"
+	@echo "  make clean             Remove build artifacts"
+	@echo "  make distclean         Remove build artifacts and toolchain"
+	@echo ""
+	@echo "Example:"
+	@echo "  make setup TOOLCHAIN_URL=https://example.com/x86_64-toolchain.tar.gz"
+	@echo "  make apps"
+
+setup: toolchain
+	@mkdir -p $(BUILD_DIR) $(ROOTFS_DIR)
+	@echo "[+] LiteOS x86_64 build environment ready"
+	@echo "    Run: make apps"
+
+toolchain:
+	@if [ -z "$(TOOLCHAIN_URL)" ]; then \
+		echo "[!] TOOLCHAIN_URL is empty. Use an existing external toolchain URL, e.g.:"; \
+		echo "    make toolchain TOOLCHAIN_URL=https://toolchain.example/x86_64-linux-gnu.tar.gz"; \
+		echo "    (or point TOOLCHAIN_DIR to a manually extracted toolchain)"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(TOOLCHAIN_DIR)" ]; then \
+		echo "[*] Downloading prebuilt toolchain..."; \
+		mkdir -p $(TOOLCHAIN_DIR); \
+		if command -v wget >/dev/null 2>&1; then \
+			wget -q -O /tmp/liteos-toolchain.tar.gz "$(TOOLCHAIN_URL)"; \
+		else \
+			curl -L --fail -o /tmp/liteos-toolchain.tar.gz "$(TOOLCHAIN_URL)"; \
+		fi; \
+		tar -xzf /tmp/liteos-toolchain.tar.gz -C $(TOOLCHAIN_DIR) --strip-components=1; \
+		rm -f /tmp/liteos-toolchain.tar.gz; \
+		echo "[+] Toolchain extracted to $(TOOLCHAIN_DIR)"; \
+	else \
+		echo "[+] Toolchain already present in $(TOOLCHAIN_DIR)"; \
+	fi
+
+verify-toolchain:
+	@if [ -f "$(TOOLCHAIN_GCC)" ]; then \
+		$(TOOLCHAIN_GCC) --version | head -n 1; \
+	elif command -v gcc >/dev/null 2>&1; then \
+		gcc --version | head -n 1; \
+	else \
+		echo "[!] No toolchain or compiler found"; \
+		exit 1; \
+	fi
+
+apps: busybox lua tcc nano
+	@echo "[+] All apps built successfully"
+
+include apps/Makefile.apps
+
+rootfs: apps
+	@echo "[*] Creating rootfs..."
+	@./scripts/create_rootfs.sh rootfs .
+	@echo "[+] Rootfs ready: $(ROOTFS_DIR)"
+
+clean:
+	@echo "[*] Cleaning build output..."
+	@rm -rf $(BUILD_DIR)/*
+	@find $(ROOTFS_DIR) -mindepth 1 -maxdepth 1 ! -name '.gitkeep' -exec rm -rf {} + 2>/dev/null || true
+	@echo "[+] Clean complete"
+
+distclean: clean
+	@echo "[*] Removing toolchain..."
+	@rm -rf $(TOOLCHAIN_DIR)
+	@echo "[+] Distclean complete"
+

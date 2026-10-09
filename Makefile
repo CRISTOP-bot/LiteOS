@@ -26,10 +26,13 @@ DEPS := $(OBJS:.o=.d) $(LIBC_OBJS:.o=.d) $(LIBC_KERN_OBJS:.o=.d) $(USER_OBJS:.o=
 
 -include $(DEPS)
 
-.PHONY: all kernel libc sysroot iso run debug test test-crypto test-libc test-toolchain clean toolchain-check FORCE
+.PHONY: all kernel libc sysroot iso run debug test test-crypto test-libc test-toolchain ci clean toolchain-check FORCE
 HOST_CC ?= gcc
 
 all kernel libc sysroot iso run debug test: | toolchain-check
+
+ci: all
+	@echo "[ci] LiteOS build pipeline completed successfully"
 
 toolchain-check:
 	@./scripts/check-toolchain.sh "$(TARGET)" "$(TOOLCHAIN_MODE)" "$(CC)" "$(AS)" "$(LD)" "$(AR)" "$(OBJCOPY)" "$(STRIP)" "$(TOOLCHAIN_ROOT)"
