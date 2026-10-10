@@ -250,13 +250,23 @@ static void execute(struct sh_command *commands, int count)
     }
 }
 
+static void shell_prompt(void)
+{
+    char cwd[256];
+    long result = sys_getcwd(cwd, sizeof(cwd));
+
+    output(1, "+--(LiteOS)-[");
+    output(1, result > 0 ? cwd : "?");
+    output(1, "]\n+--$ ");
+}
+
 int main(void)
 {
     output(1, "LiteOS /bin/sh - type help for commands\n");
     char line[LINE_SIZE];
     char storage[LINE_SIZE];
     for (;;) {
-        output(1, "liteos$ ");
+        shell_prompt();
         size_t used = 0;
         int overflow = 0;
         for (;;) {
