@@ -6,14 +6,25 @@ on:
       - 'libc/**'
       - 'tests/stdio_test.c'
       - 'tests/string_test.c'
+      - 'tests/syscall_abi_test.c'
+      - 'src/syscall.c'
+      - 'src/user/start.S'
+      - 'libc/include/sys/**'
+      - 'docs/abi.md'
       - 'Makefile'
   push:
     branches:
       - master
+      - infra/tcc-infrastructure
     paths:
       - 'libc/**'
       - 'tests/stdio_test.c'
       - 'tests/string_test.c'
+      - 'tests/syscall_abi_test.c'
+      - 'src/syscall.c'
+      - 'src/user/start.S'
+      - 'libc/include/sys/**'
+      - 'docs/abi.md'
       - 'Makefile'
 
 permissions:
@@ -25,5 +36,5 @@ jobs:
     steps:
       - name: Check out LiteOS
         uses: actions/checkout@v4
-      - name: Run libc host tests
-        run: make test-libc
+      - name: Run libc and syscall ABI host tests
+        run: make test-libc test-syscall-abi

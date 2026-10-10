@@ -2,24 +2,8 @@
 #define LITEOS_SYS_H
 
 /* LiteOS int 0x80 ABI: rax=number, rdi/rsi/rdx=arguments;
- * negative return values are -errno. Numbers match x86_64 Linux where possible. */
-#define SYS_read       0
-#define SYS_write      1
-#define SYS_open       2
-#define SYS_close      3
-#define SYS_pipe      22
-#define SYS_dup2      33
-#define SYS_getpid    39
-#define SYS_fork      57
-#define SYS_execve    59
-#define SYS_exit      60
-#define SYS_wait4     61
-#define SYS_getcwd    79
-#define SYS_chdir     80
-#define SYS_mkdir     83
-#define SYS_unlink    87
-#define SYS_getdents64 217
-#define SYS_yield     24
+ * negative return values are -errno. */
+#include <sys/liteos_numbers.h>
 
 /* dirent64 layout: d_off is the index of the next entry. */
 struct liteos_dirent64 {

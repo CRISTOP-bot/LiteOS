@@ -48,8 +48,10 @@ enlazado al kernel. Se enlaza en `0x10000001000`, fuera del mapa identidad
 supervisor del kernel; el loader carga segmentos ELF64 en un espacio de
 usuario independiente. Los procesos invocan `int 0x80`, con número de
 syscall en `rax`, argumentos en `rdi`, `rsi`, `rdx` y valor de retorno en
-`rax` (errores negativos `-errno`). Los números públicos están en
-`libc/include/sys/liteos.h`.
+`rax` (errores negativos `-errno`). Los números públicos se definen de forma
+centralizada en `libc/include/sys/liteos_numbers.h`; la interfaz de libc se
+expone en `libc/include/sys/liteos.h`. El detalle vigente está en
+[docs/abi.md](abi.md).
 
 No se ejecuta la shell en ring 0: la TTY, el VFS ramfs y los pipes son
 servicios del kernel; `/bin/sh` y `/bin/hello` son ELF de usuario. La
