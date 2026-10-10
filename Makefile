@@ -127,9 +127,9 @@ $(BUILD)/stdio_test: tests/stdio_test.c libc/src/stdio.c libc/include/stdio.h li
 	$(HOST_CC) -std=gnu11 -ffreestanding -Wall -Wextra -Werror -nostdinc -Ilibc/include -c libc/src/stdio.c -o $(BUILD)/stdio_test_stdio.o
 	$(HOST_CC) -std=gnu11 -Wall -Wextra -Werror -fno-builtin-snprintf tests/stdio_test.c $(BUILD)/stdio_test_stdio.o -o $@
 
-$(BUILD)/crypto_test: tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.c src/crypto.h src/types.h
+$(BUILD)/crypto_test: tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.c src/crypto/secure.c src/crypto.h src/types.h
 	@mkdir -p $(BUILD)
-	$(HOST_CC) -std=c11 -Wall -Wextra -Werror -Isrc tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.c -o $@
+	$(HOST_CC) -std=c11 -Wall -Wextra -Werror -Isrc tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.c src/crypto/secure.c -o $@
 
 test-crypto: $(BUILD)/crypto_test
 	@$(BUILD)/crypto_test
