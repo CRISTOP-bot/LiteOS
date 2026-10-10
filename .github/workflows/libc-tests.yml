@@ -1,0 +1,29 @@
+name: LiteOS libc host tests
+
+on:
+  pull_request:
+    paths:
+      - 'libc/**'
+      - 'tests/stdio_test.c'
+      - 'tests/string_test.c'
+      - 'Makefile'
+  push:
+    branches:
+      - master
+    paths:
+      - 'libc/**'
+      - 'tests/stdio_test.c'
+      - 'tests/string_test.c'
+      - 'Makefile'
+
+permissions:
+  contents: read
+
+jobs:
+  libc-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out LiteOS
+        uses: actions/checkout@v4
+      - name: Run libc host tests
+        run: make test-libc

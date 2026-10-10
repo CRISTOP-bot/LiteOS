@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <string.h>
 
 size_t strlen(const char *s)
@@ -52,10 +53,23 @@ void *memmove(void *dst, const void *src, size_t n)
 {
     unsigned char *d = dst;
     const unsigned char *s = src;
-    if (d < s)
-        while (n--) *d++ = *s++;
-    else
-        while (n--) d[n] = s[n];
+    uintptr_t dst_addr, src_addr;
+
+    if (n == 0 || dst == src)
+        return dst;
+
+    /* LiteOS is x86_64: compare flat addresses, not unrelated C pointers. */
+    dst_addr = (uintptr_t)dst;
+    src_addr = (uintptr_t)src;
+    if (dst_addr < src_addr || dst_addr - src_addr >= n) {
+        while (n--)
+            *d++ = *s++;
+    } else {
+        while (n) {
+            --n;
+            d[n] = s[n];
+        }
+    }
     return dst;
 }
 
@@ -79,9 +93,11 @@ int memcmp(const void *a, const void *b, size_t n)
 
 char *strchr(const char *s, int c)
 {
-    while (*s) {
-        if (*s == (char)c) return (char *)s;
-        s++;
-    }
-    return c == 0 ? (char *)s : 0;
+    unsigned char target = (unsigned char)c;
+
+    do {
+        if ((unsigned char)*s == target)
+            return (char *)s;
+    } while (*s++);
+    return 0;
 }

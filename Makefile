@@ -134,8 +134,14 @@ $(BUILD)/crypto_test: tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.
 test-crypto: $(BUILD)/crypto_test
 	@$(BUILD)/crypto_test
 
-test-libc: $(BUILD)/stdio_test
+$(BUILD)/string_test: tests/string_test.c libc/src/string.c libc/include/string.h libc/include/stdint.h
+	@mkdir -p $(BUILD)
+	$(HOST_CC) -std=c11 -ffreestanding -Wall -Wextra -Werror -nostdinc -Ilibc/include -c libc/src/string.c -o $(BUILD)/string_test_string.o
+	$(HOST_CC) -std=c11 -Wall -Wextra -Werror -fno-builtin -Ilibc/include tests/string_test.c $(BUILD)/string_test_string.o -o $@
+
+test-libc: $(BUILD)/stdio_test $(BUILD)/string_test
 	@$(BUILD)/stdio_test
+	@$(BUILD)/string_test
 
 test-toolchain:
 	@./tests/toolchain_test.sh
