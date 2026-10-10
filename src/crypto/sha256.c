@@ -72,49 +72,116 @@ static void sha256_block(u32 h[8], const u8 block[64])
     h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
 }
 
-int sha256(const void *data, usize len, u8 out[32])
+#define SHA256_CONTEXT_ACTIVE 0x53483236U
+#define SHA256_MAX_BYTES (~(u64)0 >> 3)
+
+static void copy_bytes(u8 *dst, const u8 *src, usize len)
+{
+    for (usize i = 0; i < len; ++i)
+        dst[i] = src[i];
+}
+
+int sha256_init(struct sha256_ctx *ctx)
 {
     static const u32 initial[8] = {
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
         0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
     };
-    const u8 *input = (const u8 *)data;
-    u32 h[8];
-    u8 tail[128];
-    usize full, rem;
-    u64 bits;
+    if (!ctx)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
 
-    if (!out || (len != 0 && !data) || (u64)len > (~(u64)0 >> 3))
-        return -1;
-
+    (void)crypto_secure_zero(ctx, sizeof(*ctx));
     for (unsigned int i = 0; i < 8; ++i)
-        h[i] = initial[i];
-    full = len / 64;
-    rem = len % 64;
-    for (usize i = 0; i < full; ++i)
-        sha256_block(h, input + i * 64);
+        ctx->state[i] = initial[i];
+    ctx->lifecycle = SHA256_CONTEXT_ACTIVE;
+    return CRYPTO_OK;
+}
 
-    for (usize i = 0; i < rem; ++i)
-        tail[i] = input[full * 64 + i];
-    tail[rem] = 0x80;
-    for (usize i = rem + 1; i < sizeof(tail); ++i)
-        tail[i] = 0;
-    if (rem >= 56) {
-        for (unsigned int i = 0; i < 8; ++i)
-            tail[120 + i] = 0;
-        bits = (u64)len * 8;
-        for (unsigned int i = 0; i < 8; ++i)
-            tail[127 - i] = (u8)(bits >> (i * 8U));
-        sha256_block(h, tail);
-        sha256_block(h, tail + 64);
-    } else {
-        bits = (u64)len * 8;
-        for (unsigned int i = 0; i < 8; ++i)
-            tail[63 - i] = (u8)(bits >> (i * 8U));
-        sha256_block(h, tail);
+int sha256_update(struct sha256_ctx *ctx, const void *data, usize len)
+{
+    if (!ctx || ctx->lifecycle != SHA256_CONTEXT_ACTIVE ||
+        (len && !data) || ctx->buffered >= SHA256_BLOCK_SIZE ||
+        ctx->total_bytes > SHA256_MAX_BYTES ||
+        (u64)len > SHA256_MAX_BYTES - ctx->total_bytes)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+    if (!len)
+        return CRYPTO_OK;
+
+    const u8 *input = (const u8 *)data;
+    usize left = len;
+    ctx->total_bytes += (u64)len;
+
+    if (ctx->buffered) {
+        usize take = SHA256_BLOCK_SIZE - ctx->buffered;
+        if (take > left)
+            take = left;
+        copy_bytes(ctx->block + ctx->buffered, input, take);
+        ctx->buffered += take;
+        input += take;
+        left -= take;
+        if (ctx->buffered == SHA256_BLOCK_SIZE) {
+            sha256_block(ctx->state, ctx->block);
+            (void)crypto_secure_zero(ctx->block, sizeof(ctx->block));
+            ctx->buffered = 0;
+        }
     }
 
+    while (left >= SHA256_BLOCK_SIZE) {
+        sha256_block(ctx->state, input);
+        input += SHA256_BLOCK_SIZE;
+        left -= SHA256_BLOCK_SIZE;
+    }
+    if (left) {
+        copy_bytes(ctx->block, input, left);
+        ctx->buffered = left;
+    }
+    return CRYPTO_OK;
+}
+
+int sha256_final(struct sha256_ctx *ctx, u8 out[SHA256_DIGEST_SIZE])
+{
+    if (!ctx || !out || ctx->lifecycle != SHA256_CONTEXT_ACTIVE ||
+        ctx->buffered >= SHA256_BLOCK_SIZE ||
+        ctx->total_bytes > SHA256_MAX_BYTES)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+
+    u8 tail[128];
+    for (usize i = 0; i < sizeof(tail); ++i)
+        tail[i] = 0;
+    copy_bytes(tail, ctx->block, ctx->buffered);
+    tail[ctx->buffered] = 0x80;
+
+    u64 bit_length = ctx->total_bytes << 3;
+    usize length_offset = ctx->buffered < 56 ? 56 : 120;
     for (unsigned int i = 0; i < 8; ++i)
-        store_be32(out + i * 4U, h[i]);
-    return 0;
+        tail[length_offset + 7 - i] = (u8)(bit_length >> (i * 8U));
+
+    sha256_block(ctx->state, tail);
+    if (ctx->buffered >= 56)
+        sha256_block(ctx->state, tail + SHA256_BLOCK_SIZE);
+
+    for (unsigned int i = 0; i < 8; ++i)
+        store_be32(out + i * 4U, ctx->state[i]);
+
+    (void)crypto_secure_zero(tail, sizeof(tail));
+    (void)crypto_secure_zero(ctx, sizeof(*ctx));
+    return CRYPTO_OK;
+}
+
+int sha256(const void *data, usize len, u8 out[SHA256_DIGEST_SIZE])
+{
+    struct sha256_ctx ctx;
+    int result;
+
+    if (!out || (len && !data))
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+    result = sha256_init(&ctx);
+    if (result != CRYPTO_OK)
+        return result;
+    result = sha256_update(&ctx, data, len);
+    if (result != CRYPTO_OK) {
+        (void)crypto_secure_zero(&ctx, sizeof(ctx));
+        return result;
+    }
+    return sha256_final(&ctx, out);
 }

@@ -96,7 +96,16 @@ static void sha512_block(u64 h[8], const u8 block[128])
     h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
 }
 
-int sha512(const void *data, usize len, u8 out[64])
+#define SHA512_CONTEXT_ACTIVE 0x53483531U
+#define SHA512_MAX_BYTES_HIGH (~(u64)0 >> 3)
+
+static void copy_bytes(u8 *dst, const u8 *src, usize len)
+{
+    for (usize i = 0; i < len; ++i)
+        dst[i] = src[i];
+}
+
+int sha512_init(struct sha512_ctx *ctx)
 {
     static const u64 initial[8] = {
         0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL,
@@ -104,39 +113,109 @@ int sha512(const void *data, usize len, u8 out[64])
         0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL,
         0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL
     };
-    const u8 *input = (const u8 *)data;
-    u64 h[8];
-    u8 tail[256];
-    usize full = len / 128;
-    usize rem = len % 128;
-    u64 bit_hi = (u64)len >> 61;
-    u64 bit_lo = (u64)len << 3;
+    if (!ctx)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
 
-    if (!out || (len != 0 && !data))
-        return -1;
-
+    (void)crypto_secure_zero(ctx, sizeof(*ctx));
     for (unsigned int i = 0; i < 8; ++i)
-        h[i] = initial[i];
-    for (usize i = 0; i < full; ++i)
-        sha512_block(h, input + i * 128);
+        ctx->state[i] = initial[i];
+    ctx->lifecycle = SHA512_CONTEXT_ACTIVE;
+    return CRYPTO_OK;
+}
 
-    for (usize i = 0; i < rem; ++i)
-        tail[i] = input[full * 128 + i];
-    tail[rem] = 0x80;
-    for (usize i = rem + 1; i < sizeof(tail); ++i)
-        tail[i] = 0;
-    if (rem >= 112) {
-        store_be64(tail + 240, bit_hi);
-        store_be64(tail + 248, bit_lo);
-        sha512_block(h, tail);
-        sha512_block(h, tail + 128);
-    } else {
-        store_be64(tail + 112, bit_hi);
-        store_be64(tail + 120, bit_lo);
-        sha512_block(h, tail);
+int sha512_update(struct sha512_ctx *ctx, const void *data, usize len)
+{
+    if (!ctx || ctx->lifecycle != SHA512_CONTEXT_ACTIVE ||
+        (len && !data) || ctx->buffered >= SHA512_BLOCK_SIZE ||
+        ctx->total_bytes_high > SHA512_MAX_BYTES_HIGH)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+    if (!len)
+        return CRYPTO_OK;
+
+    u64 added = (u64)len;
+    u64 new_low = ctx->total_bytes_low + added;
+    u64 carry = new_low < ctx->total_bytes_low;
+    if (ctx->total_bytes_high > SHA512_MAX_BYTES_HIGH - carry)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+
+    const u8 *input = (const u8 *)data;
+    usize left = len;
+    ctx->total_bytes_low = new_low;
+    ctx->total_bytes_high += carry;
+
+    if (ctx->buffered) {
+        usize take = SHA512_BLOCK_SIZE - ctx->buffered;
+        if (take > left)
+            take = left;
+        copy_bytes(ctx->block + ctx->buffered, input, take);
+        ctx->buffered += take;
+        input += take;
+        left -= take;
+        if (ctx->buffered == SHA512_BLOCK_SIZE) {
+            sha512_block(ctx->state, ctx->block);
+            (void)crypto_secure_zero(ctx->block, sizeof(ctx->block));
+            ctx->buffered = 0;
+        }
     }
 
+    while (left >= SHA512_BLOCK_SIZE) {
+        sha512_block(ctx->state, input);
+        input += SHA512_BLOCK_SIZE;
+        left -= SHA512_BLOCK_SIZE;
+    }
+    if (left) {
+        copy_bytes(ctx->block, input, left);
+        ctx->buffered = left;
+    }
+    return CRYPTO_OK;
+}
+
+int sha512_final(struct sha512_ctx *ctx, u8 out[SHA512_DIGEST_SIZE])
+{
+    if (!ctx || !out || ctx->lifecycle != SHA512_CONTEXT_ACTIVE ||
+        ctx->buffered >= SHA512_BLOCK_SIZE ||
+        ctx->total_bytes_high > SHA512_MAX_BYTES_HIGH)
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+
+    u8 tail[256];
+    for (usize i = 0; i < sizeof(tail); ++i)
+        tail[i] = 0;
+    copy_bytes(tail, ctx->block, ctx->buffered);
+    tail[ctx->buffered] = 0x80;
+
+    u64 bit_hi = (ctx->total_bytes_high << 3) |
+                 (ctx->total_bytes_low >> 61);
+    u64 bit_lo = ctx->total_bytes_low << 3;
+    usize length_offset = ctx->buffered < 112 ? 112 : 240;
+    store_be64(tail + length_offset, bit_hi);
+    store_be64(tail + length_offset + 8, bit_lo);
+
+    sha512_block(ctx->state, tail);
+    if (ctx->buffered >= 112)
+        sha512_block(ctx->state, tail + SHA512_BLOCK_SIZE);
+
     for (unsigned int i = 0; i < 8; ++i)
-        store_be64(out + i * 8U, h[i]);
-    return 0;
+        store_be64(out + i * 8U, ctx->state[i]);
+
+    (void)crypto_secure_zero(tail, sizeof(tail));
+    (void)crypto_secure_zero(ctx, sizeof(*ctx));
+    return CRYPTO_OK;
+}
+
+int sha512(const void *data, usize len, u8 out[SHA512_DIGEST_SIZE])
+{
+    struct sha512_ctx ctx;
+    int result;
+
+    if (!out || (len && !data))
+        return CRYPTO_ERR_INVALID_ARGUMENT;
+    result = sha512_init(&ctx);
+    if (result != CRYPTO_OK)
+        return result;
+    result = sha512_update(&ctx, data, len);
+    if (result != CRYPTO_OK) {
+        (void)crypto_secure_zero(&ctx, sizeof(ctx));
+        return result;
+    }
+    return sha512_final(&ctx, out);
 }
