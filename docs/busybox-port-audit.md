@@ -4,13 +4,15 @@
 
 Esta auditoría describe el estado observado en LiteOS `master` en el commit `1543131feda53c703bdb5add9263253c814775b1` (10 de octubre de 2026). El árbol registra `ports/busybox` como submódulo Git fijado en `b829bba95095b87834628adb38ea14b5885c0fbc`, URL `https://git.busybox.net/busybox`. El `Makefile` del commit fijado declara BusyBox **1.39.0.git**. No se cambió ni se actualizó esa referencia.
 
-El repositorio no contiene actualmente reglas de build o configuración BusyBox: `docs/ports.md` dice que ningún port se ha compilado aún. El submódulo no está materializado en la copia local de auditoría; la versión y el commit se comprobaron usando el puntero gitlink y el `Makefile` en el commit upstream fijado.
+El código incluye `apps/Makefile.apps` con nombres de objetivos (`busybox`, `lua`, `tcc`, `nano`, `rootfs`), pero no contiene recetas de compilación para esos programas, no está incluido por el `Makefile` principal y se incluye a sí mismo. Ese andamiaje selecciona `x86_64-linux-gnu` y permite caer a `gcc` del host; no es una integración de la toolchain `x86_64-elf`/sysroot de LiteOS. El `Makefile` principal solo construye el kernel, `/bin/sh` y `/bin/hello` para su initramfs. `scripts/create_rootfs.sh` descarga una toolchain; no construye BusyBox ni el rootfs. El README contiene un copiador de directorios `busybox-install` preexistentes, pero no se encontró un build que los genere.
+
+La auditoría del ABI se basa en el árbol GitHub; una copia local disponible estaba desfasada en algunos archivos. El submódulo no está materializado en esa copia; su SHA y versión se comprobaron en el gitlink y en el `Makefile` upstream del commit fijado.
 
 ## Estado por dependencia
 
 | Área | Estado | Evidencia y límite actual |
 |---|---|---|
-| Compilador / enlazador | Parcial | `toolchain/toolchain.mk` fija por defecto `x86_64-elf` y el build del kernel usa `-ffreestanding -nostdinc`; no hay objetivo BusyBox ni sysroot de libc POSIX. El build BusyBox no se ejecutó. |
+| Compilador / enlazador | Parcial | `toolchain/toolchain.mk` fija por defecto `x86_64-elf` y el build principal usa `-ffreestanding -nostdinc`; falta una regla BusyBox conectada a esa toolchain/sysroot. El andamiaje en `apps/Makefile.apps` tiene como objetivo `x86_64-linux-gnu` y puede usar compilador host. No se ejecutó ningún build. |
 | ELF / ABI de usuario | Parcial | `src/elf.c` valida ELF64 little-endian x86-64 `ET_EXEC`, segmentos dentro de rangos acotados; no hay cargador dinámico, PIE/`ET_DYN`, relocaciones ni intérprete. El arranque de usuario usa `int 0x80`; la libc expone retornos negativos `-errno`. |
 | libc / cabeceras | Parcial | `libc/include` contiene solo un subconjunto de cabeceras; `libc/src` implementa wrappers LiteOS, `snprintf` reducido y funciones de cadena básicas. No es una libc POSIX compatible con BusyBox; no hay `errno` estándar que traduzca el ABI a `-1` y `errno`. |
 | Syscalls | Parcial | `src/syscall.c` despacha `read`, `write`, `open`, `close`, `pipe`, `dup2`, `getpid`, `fork`, `execve`, `exit`, `wait4`, `getcwd`, `chdir`, `mkdir`, `unlink`, `getdents64` y `yield`. No están implementadas muchas interfaces usadas por applets, entre ellas `stat/fstat`, `lseek`, `rename`, `rmdir`, `ioctl`, `fcntl`, `mmap`, `uname` y las interfaces de señales/tiempo. |
@@ -21,19 +23,19 @@ El repositorio no contiene actualmente reglas de build o configuración BusyBox:
 | Terminal | Parcial | TTY básico con entrada canónica y eco, más `/dev/console`, `/dev/tty` y dispositivos simples. No hay `ioctl`/`termios`, control de trabajos ni modos POSIX de terminal. |
 | Señales y tiempo | Ausente en ABI de usuario | Hay temporizador y algunos campos internos de proceso, pero no se encontraron syscalls para `sigaction`, `kill`, alarmas, `clock_gettime`, `nanosleep` u otras interfaces de tiempo requeridas por applets. `/dev/random` y `/dev/urandom` devuelven `ENOSYS` en lectura. |
 | Kconfig de BusyBox | Ausente | No hay configuración BusyBox específica de LiteOS ni `.config` comprometido que seleccione applets compatibles. |
-| Integración al rootfs | Parcial | `scripts/mkinitramfs.py` y el arranque incorporan `/bin/sh` y `/bin/hello`; no existe instalación BusyBox ni ejecución de `busybox` desde el shell actual. |
+| Integración al rootfs | Parcial | El `Makefile` principal agrega `/bin/sh` y `/bin/hello` a su initramfs; no instala BusyBox. El Makefile auxiliar declara objetivos pero carece de recetas de port y no está conectado al build principal. El README solo copia árboles de instalación si ya existen. |
 | Compilación / QEMU | No verificado | Este entorno no tiene `git`, `make`, `gcc`, `qemu-system-x86_64` ni `x86_64-elf-gcc` disponibles. No se afirmó build ni ejecución. |
 
 ## Consecuencia
 
-No es seguro activar applets de BusyBox ni declarar un port funcional con el ABI/libc actuales. En particular, compilar contra cabeceras del host o añadir stubs para las funciones ausentes produciría un binario engañoso o incompatible, y no se hizo.
+No es seguro activar applets de BusyBox ni declarar un port funcional con el ABI/libc actuales. Las etiquetas de objetivos y el copiador de un directorio de instalación preexistente no prueban que BusyBox compile o se ejecute. En particular, compilar contra cabeceras del host o añadir stubs para las funciones ausentes produciría un binario engañoso o incompatible, y no se hizo.
 
 ## Secuencia recomendada para continuar
 
 1. Materializar y verificar el submódulo en un checkout con `git`; conservar su SHA fijado.
 2. Definir el contrato libc/syscall soportado por LiteOS y añadir pruebas de kernel para cada syscall nueva. Como base, implementar y probar `lseek`, `stat/fstat`, `rename`, `rmdir`, `fcntl`, `ioctl`/TTY y la interfaz de errores de libc antes de seleccionar applets que las necesitan.
 3. Añadir compatibilidad de tiempo/señales/proceso solo con implementaciones reales y pruebas, no con stubs.
-4. Añadir una configuración BusyBox mínima revisada contra ese contrato y reglas reproducibles que usen únicamente la toolchain/sysroot reales.
+4. Reemplazar o corregir el andamiaje auxiliar con reglas reproducibles que usen únicamente la toolchain/sysroot reales; añadir una configuración mínima BusyBox revisada contra ese contrato.
 5. Instalar al initramfs y probar ELF y applets bajo QEMU. Reportar build y ejecución como hitos distintos.
 
 La lista de syscalls es una auditoría estática del dispatcher y las cabeceras, no una declaración de conformidad POSIX. Cada futura capacidad debe verificarse con pruebas de ejecución antes de habilitar applets dependientes.
