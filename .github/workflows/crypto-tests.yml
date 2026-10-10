@@ -1,0 +1,29 @@
+name: Crypto host tests
+
+on:
+  pull_request:
+    paths:
+      - 'src/crypto/**'
+      - 'src/crypto.h'
+      - 'tests/crypto_test.c'
+      - 'Makefile'
+  push:
+    branches:
+      - master
+    paths:
+      - 'src/crypto/**'
+      - 'src/crypto.h'
+      - 'tests/crypto_test.c'
+      - 'Makefile'
+
+permissions:
+  contents: read
+
+jobs:
+  crypto-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out LiteOS
+        uses: actions/checkout@v4
+      - name: Run crypto unit tests on host
+        run: make test-crypto
