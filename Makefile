@@ -131,8 +131,13 @@ $(BUILD)/crypto_test: tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.
 	@mkdir -p $(BUILD)
 	$(HOST_CC) -std=c11 -Wall -Wextra -Werror -Isrc tests/crypto_test.c src/crypto/sha256.c src/crypto/sha512.c src/crypto/secure.c -o $@
 
-test-crypto: $(BUILD)/crypto_test
+$(BUILD)/crypto_phase2_test: tests/crypto_phase2_test.c src/crypto/sha256.c src/crypto/sha512.c src/crypto/secure.c src/crypto/mac/hmac.c src/crypto/kdf/hkdf.c src/crypto/kdf/pbkdf2.c src/crypto.h src/types.h
+	@mkdir -p $(BUILD)
+	$(HOST_CC) -std=c11 -Wall -Wextra -Werror -Isrc tests/crypto_phase2_test.c src/crypto/sha256.c src/crypto/sha512.c src/crypto/secure.c src/crypto/mac/hmac.c src/crypto/kdf/hkdf.c src/crypto/kdf/pbkdf2.c -o $@
+
+test-crypto: $(BUILD)/crypto_test $(BUILD)/crypto_phase2_test
 	@$(BUILD)/crypto_test
+	@$(BUILD)/crypto_phase2_test
 
 test-libc: $(BUILD)/stdio_test
 	@$(BUILD)/stdio_test
