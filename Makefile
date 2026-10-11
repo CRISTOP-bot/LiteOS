@@ -95,7 +95,7 @@ $(BUILD)/initramfs.cpio: $(USER_BINS) scripts/mkinitramfs.py
 	python3 scripts/mkinitramfs.py $@ $(USER_BINS)
 
 $(BUILD)/initramfs.o: $(BUILD)/initramfs.cpio
-	cd $(BUILD) && $(OBJCOPY) -I binary -O elf64-x86-64 -B i386:x86-64 initramfs.cpio initramfs.o
+	$(OBJCOPY) -I binary -O elf64-x86-64 -B i386:x86-64 $(BUILD)/initramfs.cpio $(BUILD)/initramfs.o
 	$(OBJCOPY) --rename-section .data=.rodata,alloc,load,readonly,data,contents $@
 
 $(BUILD)/libc_kern/%.o: libc/src/%.c $(TOOLCHAIN_CONFIG) | build-prerequisites

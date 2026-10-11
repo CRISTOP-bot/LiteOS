@@ -24,6 +24,7 @@ jobs:
         with:
           path: build/toolchain
           key: liteos-x86_64-elf-ubuntu-binutils-2.46.1-gcc-14.2.0-v1
+          save-always: true
       - name: Build kernel, libc, sysroot and ISO
         run: make all
       - name: Run host, initramfs and QEMU boot tests
