@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/liteos_numbers.h>
 #include "kernel.h"
 
 extern struct proc *current;
@@ -298,10 +299,10 @@ void syscall_dispatch(struct trap_frame *tf)
 {
     long r = -ENOSYS;
     switch (tf->rax) {
-    case 0: r = sys_io((int)tf->rdi, (void *)tf->rsi, tf->rdx, 0); break;
-    case 1: r = sys_io((int)tf->rdi, (void *)tf->rsi, tf->rdx, 1); break;
-    case 2: r = sys_open_file((const char *)tf->rdi, (int)tf->rsi); break;
-    case 3:
+    case SYS_read: r = sys_io((int)tf->rdi, (void *)tf->rsi, tf->rdx, 0); break;
+    case SYS_write: r = sys_io((int)tf->rdi, (void *)tf->rsi, tf->rdx, 1); break;
+    case SYS_open: r = sys_open_file((const char *)tf->rdi, (int)tf->rsi); break;
+    case SYS_close:
         if (get_file((int)tf->rdi)) {
             proc_fd_close((int)tf->rdi);
             r = 0;
@@ -309,7 +310,7 @@ void syscall_dispatch(struct trap_frame *tf)
             r = -EBADF;
         }
         break;
-    case 22: {
+    case SYS_pipe: {
         int fds[2];
         r = pipe_create_fds(fds);
         if (!r && user_copy_to((void *)tf->rdi, fds, sizeof(fds)) < 0) {
@@ -317,8 +318,8 @@ void syscall_dispatch(struct trap_frame *tf)
         }
         break;
     }
-    case 24: schedule(); r = 0; break;
-    case 33: {
+    case SYS_yield: schedule(); r = 0; break;
+    case SYS_dup2: {
         int old = (int)tf->rdi, newfd = (int)tf->rsi;
         struct file *f = get_file(old);
         if (!f || newfd < 0 || newfd >= PROC_FDS) { r = -EBADF; break; }
@@ -333,19 +334,19 @@ void syscall_dispatch(struct trap_frame *tf)
         r = newfd;
         break;
     }
-    case 39: r = current->pid; break;
-    case 57: r = proc_fork(tf); break;
-    case 59: r = sys_exec(tf, (const char *)tf->rdi, tf->rsi, tf->rdx); break;
-    case 60: proc_exit((int)tf->rdi); break;
-    case 61: {
+    case SYS_getpid: r = current->pid; break;
+    case SYS_fork: r = proc_fork(tf); break;
+    case SYS_execve: r = sys_exec(tf, (const char *)tf->rdi, tf->rsi, tf->rdx); break;
+    case SYS_exit: proc_exit((int)tf->rdi); break;
+    case SYS_wait4: {
         int status = 0;
         r = proc_wait((int)tf->rdi, &status);
         if (r > 0 && tf->rsi && user_copy_to((void *)tf->rsi, &status, sizeof(status)) < 0)
             r = -EFAULT;
         break;
     }
-    case 79: r = sys_getcwd_path((char *)tf->rdi, tf->rsi); break;
-    case 80: {
+    case SYS_getcwd: r = sys_getcwd_path((char *)tf->rdi, tf->rsi); break;
+    case SYS_chdir: {
         char path[PATH_LIMIT];
         r = copy_string(path, (const char *)tf->rdi, sizeof(path));
         if (r) break;
@@ -357,9 +358,9 @@ void syscall_dispatch(struct trap_frame *tf)
         r = 0;
         break;
     }
-    case 83: r = sys_change_node((const char *)tf->rdi, 1); break;
-    case 87: r = sys_change_node((const char *)tf->rdi, 0); break;
-    case 217: r = sys_getdents((int)tf->rdi, (void *)tf->rsi, tf->rdx); break;
+    case SYS_mkdir: r = sys_change_node((const char *)tf->rdi, 1); break;
+    case SYS_unlink: r = sys_change_node((const char *)tf->rdi, 0); break;
+    case SYS_getdents64: r = sys_getdents((int)tf->rdi, (void *)tf->rsi, tf->rdx); break;
     default: break;
     }
     tf->rax = (u64)r;
