@@ -1,0 +1,30 @@
+name: LiteOS cross build and QEMU boot
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-qemu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AUTO_INSTALL_DEPS: '1'
+    steps:
+      - name: Check out LiteOS
+        uses: actions/checkout@v4
+      - name: Restore the pinned x86_64-elf toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: build/toolchain
+          key: liteos-x86_64-elf-ubuntu-binutils-2.46.1-gcc-14.2.0-v1
+      - name: Build kernel, libc, sysroot and ISO
+        run: make all
+      - name: Run host, initramfs and QEMU boot tests
+        run: make test

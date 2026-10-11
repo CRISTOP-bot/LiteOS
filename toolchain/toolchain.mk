@@ -1,10 +1,17 @@
 # Cross-toolchain by default. Native freestanding builds require explicit opt-in.
 TARGET ?= x86_64-elf
 TOOLCHAIN_MODE ?= cross
-TOOLCHAIN_ROOT ?=
+AUTO_INSTALL_DEPS ?= 1
 
 ifeq ($(filter $(TOOLCHAIN_MODE),cross host),)
 $(error TOOLCHAIN_MODE debe ser cross o host (recibido: $(TOOLCHAIN_MODE)))
+endif
+
+ifeq ($(TOOLCHAIN_MODE),cross)
+# Reuse PATH only after a real compile/link probe; otherwise bootstrap locally.
+TOOLCHAIN_ROOT ?= $(shell if ./scripts/has-toolchain.sh "$(TARGET)" >/dev/null 2>&1; then printf ''; else printf 'build/toolchain'; fi)
+else
+TOOLCHAIN_ROOT ?=
 endif
 
 ifeq ($(TOOLCHAIN_MODE),cross)
