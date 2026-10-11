@@ -26,29 +26,44 @@ DEPS := $(OBJS:.o=.d) $(LIBC_OBJS:.o=.d) $(LIBC_KERN_OBJS:.o=.d) $(USER_OBJS:.o=
 
 -include $(DEPS)
 
-.PHONY: all kernel libc sysroot iso run debug test test-crypto test-libc test-toolchain test-syscall-abi ci clean toolchain-check FORCE
+.PHONY: all kernel libc sysroot iso run debug test test-crypto test-libc test-toolchain test-syscall-abi ci clean host-build-deps toolchain build-prerequisites toolchain-check FORCE
 HOST_CC ?= gcc
 
-all kernel libc sysroot iso run debug test: | toolchain-check
+# Build entry points install missing host packages and bootstrap the real target
+# compiler. toolchain-check remains an explicit, side-effect-free validation.
+all kernel libc sysroot iso run debug test: | build-prerequisites
 
 ci: all
 	@echo "[ci] LiteOS build pipeline completed successfully"
 
+host-build-deps:
+	@AUTO_INSTALL_DEPS="$(AUTO_INSTALL_DEPS)" ./scripts/install-build-deps.sh
+
+toolchain: host-build-deps
+ifeq ($(TOOLCHAIN_MODE),cross)
+	@./scripts/bootstrap-toolchain.sh "$(TARGET)" "$(TOOLCHAIN_ROOT)"
+else
+	@echo '[toolchain] TOOLCHAIN_MODE=host explicitly selected; skipping cross-toolchain bootstrap.'
+endif
+
+build-prerequisites: toolchain
+	@./scripts/check-toolchain.sh "$(TARGET)" "$(TOOLCHAIN_MODE)" "$(CC)" "$(AS)" "$(LD)" "$(AR)" "$(OBJCOPY)" "$(STRIP)" "$(TOOLCHAIN_ROOT)"
+
 toolchain-check:
 	@./scripts/check-toolchain.sh "$(TARGET)" "$(TOOLCHAIN_MODE)" "$(CC)" "$(AS)" "$(LD)" "$(AR)" "$(OBJCOPY)" "$(STRIP)" "$(TOOLCHAIN_ROOT)"
 
-$(TOOLCHAIN_CONFIG): FORCE | toolchain-check
+$(TOOLCHAIN_CONFIG): FORCE | build-prerequisites
 	@mkdir -p $(BUILD)
 	@printf '%s\n' '$(TARGET)' '$(TOOLCHAIN_MODE)' '$(CC)' '$(AS)' '$(LD)' '$(AR)' '$(OBJCOPY)' '$(STRIP)' '$(CFLAGS)' '$(USER_CFLAGS)' '$(USER_LDFLAGS)' '$(LDFLAGS)' > $@.tmp
 	@if cmp -s $@.tmp $@; then rm $@.tmp; else mv $@.tmp $@; fi
 
 all: kernel libc sysroot iso
 
-$(BUILD)/%.o: %.c $(TOOLCHAIN_CONFIG) | toolchain-check
+$(BUILD)/%.o: %.c $(TOOLCHAIN_CONFIG) | build-prerequisites
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -Isrc -Ilibc/include -c $< -o $@
 
-$(BUILD)/%.o: %.S $(TOOLCHAIN_CONFIG) | toolchain-check
+$(BUILD)/%.o: %.S $(TOOLCHAIN_CONFIG) | build-prerequisites
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -Isrc -Ilibc/include -c $< -o $@
 
@@ -58,11 +73,11 @@ $(KERNEL): $(OBJS) $(LIBC_KERN_OBJS) $(BUILD)/initramfs.o linker.ld
 	@mkdir -p $(BUILD)
 	$(LD) $(LDFLAGS) -T linker.ld $(OBJS) $(LIBC_KERN_OBJS) $(BUILD)/initramfs.o -o $@
 
-$(BUILD)/userland/%.o: src/user/%.c $(TOOLCHAIN_CONFIG) | toolchain-check
+$(BUILD)/userland/%.o: src/user/%.c $(TOOLCHAIN_CONFIG) | build-prerequisites
 	@mkdir -p $(dir $@)
 	$(CC) $(USER_CFLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD)/userland/%.o: src/user/%.S $(TOOLCHAIN_CONFIG) | toolchain-check
+$(BUILD)/userland/%.o: src/user/%.S $(TOOLCHAIN_CONFIG) | build-prerequisites
 	@mkdir -p $(dir $@)
 	$(CC) $(USER_CFLAGS) -MMD -MP -c $< -o $@
 
@@ -83,13 +98,13 @@ $(BUILD)/initramfs.o: $(BUILD)/initramfs.cpio
 	cd $(BUILD) && $(OBJCOPY) -I binary -O elf64-x86-64 -B i386:x86-64 initramfs.cpio initramfs.o
 	$(OBJCOPY) --rename-section .data=.rodata,alloc,load,readonly,data,contents $@
 
-$(BUILD)/libc_kern/%.o: libc/src/%.c $(TOOLCHAIN_CONFIG) | toolchain-check
+$(BUILD)/libc_kern/%.o: libc/src/%.c $(TOOLCHAIN_CONFIG) | build-prerequisites
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -Ilibc/include -c $< -o $@
 
 libc: $(BUILD)/libliteosc.a
 
-$(BUILD)/libc/%.o: libc/src/%.c $(TOOLCHAIN_CONFIG) | toolchain-check
+$(BUILD)/libc/%.o: libc/src/%.c $(TOOLCHAIN_CONFIG) | build-prerequisites
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -Ilibc/include -c $< -o $@
 
